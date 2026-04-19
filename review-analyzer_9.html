@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<title>Review Analyzer – CRO Tool</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --card: #171a21;
+    --card-2: #1f232c;
+    --border: #2a2f3a;
+    --text: #e8eaee;
+    --text-sec: #9aa0ab;
+    --text-ter: #6b7180;
+    --accent: #4a90ff;
+    --accent-bg: #1a2947;
+    --ok: #34c77c;
+    --err: #e15757;
+    --warn: #e5a33c;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem 1rem; }
+  .wrap { max-width: 780px; margin: 0 auto; }
+  header { margin-bottom: 2rem; }
+  h1 { font-size: 22px; font-weight: 600; margin-bottom: 4px; }
+  .sub { font-size: 13px; color: var(--text-sec); }
+
+  .access-overlay { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+  .access-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; width: 100%; max-width: 360px; }
+  .access-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; text-align: center; }
+  .access-sub { font-size: 13px; color: var(--text-sec); margin-bottom: 1.5rem; text-align: center; line-height: 1.5; }
+
+  .progress { display: flex; gap: 8px; align-items: center; margin: 1.5rem 0; font-size: 12px; flex-wrap: wrap; }
+  .ps { display: flex; align-items: center; gap: 6px; color: var(--text-ter); }
+  .ps.cur { color: var(--text); font-weight: 500; }
+  .ps.done { color: var(--ok); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); }
+  .ps.cur .dot { background: var(--accent); }
+  .ps.done .dot { background: var(--ok); }
+  .sep { color: var(--border); }
+
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem; }
+  .nav-title { font-size: 15px; font-weight: 500; margin-bottom: 2px; }
+  .nav-sub { font-size: 12px; color: var(--text-sec); margin-bottom: 1.25rem; }
+  label { display: block; font-size: 12px; color: var(--text-sec); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+  input, select, textarea { width: 100%; background: var(--card-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 14px; font-family: inherit; margin-bottom: 14px; }
+  textarea { min-height: 140px; resize: vertical; line-height: 1.5; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  button { background: var(--accent); color: white; border: none; border-radius: 8px; padding: 10px 18px; font-size: 14px; font-weight: 500; cursor: pointer; font-family: inherit; transition: opacity 0.15s; }
+  button:hover { opacity: 0.9; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+  button.ghost:hover { background: var(--card-2); }
+  .btn-row { display: flex; gap: 10px; margin-top: 8px; }
+  .step { display: none; }
+  .step.active { display: block; }
+
+  .import-tabs { display: flex; gap: 8px; margin-bottom: 1.5rem; }
+  .import-tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--card-2); cursor: pointer; font-size: 12px; color: var(--text-sec); font-weight: 500; transition: all 0.15s; }
+  .import-tab:hover { border-color: var(--text-ter); color: var(--text); }
+  .import-tab.active { border-color: var(--accent); background: var(--accent-bg); color: var(--text); }
+  .import-tab svg { width: 22px; height: 22px; }
+
+  .dz { border: 2px dashed var(--border); border-radius: 10px; padding: 2.5rem 1rem; text-align: center; cursor: pointer; transition: all 0.15s; }
+  .dz:hover, .dz.over { border-color: var(--accent); background: var(--accent-bg); }
+  .dz svg { width: 32px; height: 32px; color: var(--text-sec); margin-bottom: 8px; }
+  .dz-label { font-size: 13px; color: var(--text-sec); }
+  .dz-sub { font-size: 12px; color: var(--text-ter); margin-top: 4px; }
+  .preview { max-width: 100%; max-height: 160px; object-fit: contain; border-radius: 8px; border: 1px solid var(--border); margin-top: 12px; display: none; }
+
+  .status { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-top: 12px; display: none; }
+  .status.info { background: var(--accent-bg); color: var(--accent); border: 1px solid var(--accent); display: block; }
+  .status.ok { background: rgba(52, 199, 124, 0.1); color: var(--ok); border: 1px solid var(--ok); display: block; }
+  .status.err { background: rgba(225, 87, 87, 0.1); color: var(--err); border: 1px solid var(--err); display: block; }
+  .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .char-count { font-size: 12px; color: var(--text-ter); margin-top: -8px; margin-bottom: 1rem; }
+
+  .import-queue { margin-top: 1rem; }
+  .queue-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--card-2); border-radius: 8px; margin-bottom: 6px; font-size: 13px; }
+  .queue-check { color: var(--ok); flex-shrink: 0; }
+  .queue-info { flex: 1; }
+  .queue-source { font-weight: 500; }
+  .queue-count { color: var(--text-sec); font-size: 12px; }
+  .queue-remove { background: transparent; border: none; color: var(--text-ter); cursor: pointer; padding: 4px 8px; font-size: 16px; }
+  .queue-remove:hover { color: var(--err); }
+
+  .source-row { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }
+  .source-row label { flex-shrink: 0; margin-bottom: 0; }
+
+  .loading-center { text-align: center; padding: 3rem 1.5rem; }
+  .loading-head { font-size: 15px; font-weight: 500; margin-bottom: 8px; }
+  .loading-sub { font-size: 13px; color: var(--text-sec); margin-bottom: 1.5rem; }
+  .bar { height: 4px; background: var(--card-2); border-radius: 2px; overflow: hidden; margin: 12px 0; }
+  .bar-fill { height: 100%; background: var(--accent); transition: width 0.4s; }
+  .timer-row { display: flex; justify-content: center; gap: 12px; font-size: 12px; color: var(--text-ter); margin-top: 10px; font-variant-numeric: tabular-nums; }
+  .timer-val { color: var(--text-sec); font-weight: 500; }
+
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 1.25rem; }
+  .metric { background: var(--card-2); border-radius: 10px; padding: 1rem; text-align: center; }
+  .metric-val { font-size: 26px; font-weight: 600; }
+  .metric-label { font-size: 11px; color: var(--text-sec); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 4px; }
+
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 1.25rem; overflow-x: auto; }
+  .tab-btn { background: transparent; border: none; color: var(--text-sec); padding: 10px 16px; font-size: 13px; font-weight: 500; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+  .tab-btn.active { color: var(--text); border-bottom-color: var(--accent); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-sec); margin-bottom: 12px; }
+
+  .pain { padding: 12px 0; border-bottom: 1px solid var(--border); display: flex; gap: 12px; }
+  .pain:last-child { border-bottom: none; }
+  .pain-num { color: var(--text-ter); font-size: 12px; min-width: 20px; font-weight: 500; padding-top: 2px; }
+  .pain-title { font-size: 14px; font-weight: 500; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .pain-desc { font-size: 13px; color: var(--text-sec); line-height: 1.5; }
+
+  .quote { border-left: 2px solid var(--accent); padding: 8px 12px; margin-top: 8px; font-size: 12px; color: var(--text-sec); font-style: italic; line-height: 1.6; background: var(--card-2); border-radius: 0 6px 6px 0; }
+  .quote-source { display: inline-block; font-style: normal; font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 8px; background: var(--bg); color: var(--text-sec); border-radius: 10px; margin-bottom: 6px; border: 1px solid var(--border); }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 500; text-transform: uppercase; }
+  .badge-hoch { background: rgba(225, 87, 87, 0.15); color: var(--err); }
+  .badge-mittel { background: rgba(229, 163, 60, 0.15); color: var(--warn); }
+  .badge-niedrig { background: rgba(74, 144, 255, 0.15); color: var(--accent); }
+
+  .jtbd { padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .jtbd:last-child { border-bottom: none; }
+  .jtbd-trigger { font-size: 11px; color: var(--text-ter); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .jtbd-statement { font-size: 14px; line-height: 1.5; }
+
+  .persona { background: var(--card-2); border-radius: 10px; padding: 1rem; margin-bottom: 10px; }
+  .persona-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .persona-list { font-size: 13px; line-height: 1.6; color: var(--text); }
+
+  .hyp { background: var(--card-2); border-radius: 10px; padding: 14px; margin-bottom: 10px; }
+  .hyp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; color: var(--text-sec); }
+  .hyp-if { color: var(--accent); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-right: 6px; }
+  .hyp-then { color: var(--ok); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-right: 6px; }
+  .hyp-because { color: var(--warn); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-right: 6px; }
+  .hyp-line { font-size: 14px; line-height: 1.6; margin-bottom: 6px; }
+  .hyp-line:last-child { margin-bottom: 0; }
+
+  .dash-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; gap: 10px; flex-wrap: wrap; }
+  .dash-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .small-btn { font-size: 12px; padding: 6px 12px; }
+  .small-btn svg { width: 14px; height: 14px; vertical-align: middle; margin-right: 4px; }
+
+  .key-info { background: var(--accent-bg); border: 1px solid var(--accent); border-radius: 8px; padding: 12px 14px; font-size: 13px; color: var(--text); margin-bottom: 1rem; line-height: 1.5; }
+  .key-info a { color: var(--accent); }
+
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes scoreGrow { from { stroke-dashoffset: 283; } }
+  .anim { opacity: 0; animation: fadeUp 0.5s ease-out forwards; }
+  .anim-delay-1 { animation-delay: 0.05s; }
+  .anim-delay-2 { animation-delay: 0.15s; }
+  .anim-delay-3 { animation-delay: 0.25s; }
+  .anim-delay-4 { animation-delay: 0.35s; }
+  .anim-delay-5 { animation-delay: 0.45s; }
+  .anim-delay-6 { animation-delay: 0.55s; }
+
+  .overview-hero { display: grid; grid-template-columns: 200px 1fr; gap: 20px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem; align-items: center; }
+  .score-ring { width: 160px; height: 160px; position: relative; }
+  .score-ring svg { transform: rotate(-90deg); }
+  .score-ring circle { fill: none; stroke-width: 10; }
+  .score-ring .track { stroke: var(--card-2); }
+  .score-num { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .score-val { font-size: 38px; font-weight: 600; line-height: 1; }
+  .score-of { font-size: 12px; color: var(--text-sec); margin-top: 4px; }
+  .hero-summary-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-sec); margin-bottom: 8px; }
+  .hero-summary-text { font-size: 15px; line-height: 1.5; }
+
+  .takeaway-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 1rem; }
+  .takeaway { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; display: flex; gap: 12px; align-items: flex-start; }
+  .takeaway-icon { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--text); }
+  .takeaway-icon svg { width: 22px; height: 22px; }
+  .takeaway-content { flex: 1; min-width: 0; }
+  .takeaway-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .takeaway-title { font-size: 14px; font-weight: 500; }
+  .takeaway-insight { font-size: 13px; color: var(--text-sec); line-height: 1.5; }
+
+  .collapse { margin-top: 10px; }
+  .collapse-btn { background: transparent; border: 1px solid var(--border); color: var(--text-sec); font-size: 12px; padding: 4px 10px; border-radius: 6px; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+  .collapse-btn:hover { border-color: var(--accent); color: var(--text); }
+  .collapse-arrow { transition: transform 0.2s; display: inline-block; font-size: 10px; }
+  .collapse.open .collapse-arrow { transform: rotate(180deg); }
+  .collapse-body { display: none; margin-top: 8px; }
+  .collapse.open .collapse-body { display: block; animation: fadeIn 0.2s; }
+
+  .sources-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1rem; }
+  .source-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; background: var(--card-2); border: 1px solid var(--border); border-radius: 16px; font-size: 12px; color: var(--text-sec); }
+  .source-chip strong { color: var(--text); font-weight: 500; }
+</style>
+</head>
+<body>
+
+<div class="access-overlay" id="accessOverlay" style="display:none;">
+  <div class="access-card">
+    <div class="access-title">Zugang erforderlich</div>
+    <div class="access-sub">Dieses Tool ist privat. Bitte gib den Zugangscode ein.</div>
+    <input type="password" id="accessInput" placeholder="Code" onkeydown="if(event.key==='Enter') checkAccess()" />
+    <button onclick="checkAccess()" style="width:100%;">Weiter</button>
+    <div id="accessError" style="color:var(--err);font-size:12px;margin-top:10px;text-align:center;display:none;">Falscher Code.</div>
+  </div>
+</div>
+
+<div class="wrap" id="app" style="display:none;">
+  <header>
+    <h1>Review Analyzer</h1>
+    <div class="sub">KI-gestützte Analyse von Kundenreviews · Pain Points · JTBD · Personas · A/B Test-Hypothesen</div>
+  </header>
+
+  <div class="progress">
+    <div class="ps cur" id="ps1"><span class="dot"></span> Setup</div>
+    <span class="sep">›</span>
+    <div class="ps" id="ps2"><span class="dot"></span> Import</div>
+    <span class="sep">›</span>
+    <div class="ps" id="ps3"><span class="dot"></span> Analyse</div>
+    <span class="sep">›</span>
+    <div class="ps" id="ps4"><span class="dot"></span> Dashboard</div>
+  </div>
+
+  <div class="step active" id="step1">
+    <div class="card">
+      <div class="nav-title">Projekt einrichten</div>
+      <div class="nav-sub">API Key + Projektname</div>
+      <div class="key-info">
+        <strong>Claude API Key:</strong> benötigt für die KI-Analyse. Hol ihn auf <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> → API Keys. Wird nur lokal gespeichert.
+      </div>
+      <label>Claude API Key</label>
+      <input type="password" id="apiKey" placeholder="sk-ant-api03-..." />
+      <label>Projektname</label>
+      <input type="text" id="projectName" placeholder="z.B. FC Schalke Shop – Q2 2025" />
+      <div class="btn-row">
+        <button onclick="goStep2()" style="flex:1;">Weiter →</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="step" id="step2">
+    <div class="card">
+      <div class="nav-title" id="s2title">Reviews importieren</div>
+      <div class="nav-sub" id="s2sub">Mehrere Quellen möglich – jeder Import wird automatisch kombiniert</div>
+
+      <div class="import-tabs">
+        <div class="import-tab active" id="tab-screenshot" onclick="switchImport('screenshot')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <span>Screenshot</span>
+        </div>
+        <div class="import-tab" id="tab-paste" onclick="switchImport('paste')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          <span>Copy / Paste</span>
+        </div>
+        <div class="import-tab" id="tab-csv" onclick="switchImport('csv')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+          <span>CSV Upload</span>
+        </div>
+      </div>
+
+      <div id="area-screenshot">
+        <label>Screenshot hochladen – Plattform + Reviews werden automatisch erkannt</label>
+        <div class="dz" id="dz"
+             onclick="document.getElementById('imgInput').click()"
+             ondragover="dzOver(event)" ondragleave="dzLeave()" ondrop="dzDrop(event)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <div class="dz-label" id="dzLabel">Hier klicken oder Screenshot hineinziehen</div>
+          <div class="dz-sub">PNG · JPG · lange Screenshots werden automatisch in Chunks aufgeteilt</div>
+        </div>
+        <input type="file" id="imgInput" accept="image/*" style="display:none;" onchange="onImg(this)" />
+        <canvas id="cnv" style="display:none;"></canvas>
+        <img id="preview" class="preview" />
+        <div id="imgStatus" class="status"></div>
+      </div>
+
+      <div id="area-paste" style="display:none;">
+        <div class="source-row">
+          <label style="min-width:80px;">Quelle</label>
+          <select id="pasteSource" style="margin:0;">
+            <option>Trustpilot</option><option>Google Reviews</option><option>Amazon</option>
+            <option>App Store</option><option>Play Store</option><option>Yelp</option><option>Eigene / Andere</option>
+          </select>
+        </div>
+        <label>Reviews einfügen – ein Review pro Zeile</label>
+        <textarea id="reviewText" placeholder="Reviews hier einfügen..."></textarea>
+        <div class="char-count" id="charCount">0 Reviews erkannt</div>
+        <button onclick="addPasteImport()" class="ghost" style="width:100%;">+ Zum Projekt hinzufügen</button>
+      </div>
+
+      <div id="area-csv" style="display:none;">
+        <div class="source-row">
+          <label style="min-width:80px;">Quelle</label>
+          <select id="csvSource" style="margin:0;">
+            <option>Trustpilot</option><option>Google Reviews</option><option>Amazon</option>
+            <option>App Store</option><option>Play Store</option><option>Yelp</option><option>Eigene / Andere</option>
+          </select>
+        </div>
+        <label>CSV hochladen (Spalte "review" oder "text")</label>
+        <div class="dz" onclick="document.getElementById('csvInput').click()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <div class="dz-label" id="csvLabel">Hier klicken oder CSV hineinziehen</div>
+        </div>
+        <input type="file" id="csvInput" accept=".csv" style="display:none;" onchange="onCsv(this)" />
+      </div>
+
+      <div class="import-queue" id="importQueue"></div>
+
+      <div class="btn-row" style="margin-top:1.25rem;">
+        <button class="ghost" onclick="goStep1()">← Zurück</button>
+        <button onclick="goStep3()" id="analyzeBtn" style="flex:1;" disabled>Analysieren →</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="step" id="step3">
+    <div class="card loading-center">
+      <div class="loading-head"><span class="spinner"></span><span id="aHead">Analysiere Reviews...</span></div>
+      <div class="loading-sub" id="aSub">Verbinde mit Claude API...</div>
+      <div class="bar"><div class="bar-fill" id="aBar" style="width:0%"></div></div>
+      <div class="timer-row">
+        <div>Verstrichen: <span class="timer-val" id="elapsedTime">0:00</span></div>
+        <div>·</div>
+        <div>Geschätzt: <span class="timer-val" id="estTime">~0:20</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step" id="step4">
+    <div class="dash-head">
+      <div>
+        <div class="nav-title" id="dTitle">Dashboard</div>
+        <div class="nav-sub" id="dSub"></div>
+      </div>
+      <div class="dash-actions">
+        <button class="ghost small-btn" onclick="addMoreReviews()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Weitere Reviews
+        </button>
+        <button class="ghost small-btn" onclick="doExport()">Export JSON</button>
+        <button class="ghost small-btn" onclick="resetApp()">Neues Projekt</button>
+      </div>
+    </div>
+
+    <div id="sourcesBar" class="sources-bar"></div>
+    <div class="metrics" id="metrics"></div>
+
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('overview',this)">Überblick</button>
+      <button class="tab-btn" onclick="switchTab('pain',this)">Pain Points</button>
+      <button class="tab-btn" onclick="switchTab('jtbd',this)">JTBD</button>
+      <button class="tab-btn" onclick="switchTab('personas',this)">Personas</button>
+      <button class="tab-btn" onclick="switchTab('hyp',this)">Hypothesen</button>
+    </div>
+
+    <div class="tab-panel active" id="panel-overview"><div id="overviewContent"></div></div>
+    <div class="tab-panel" id="panel-pain"><div class="card"><div class="section-title">Top Pain Points</div><div id="painList"></div></div></div>
+    <div class="tab-panel" id="panel-jtbd"><div class="card"><div class="section-title">Jobs to be done</div><div id="jtbdList"></div></div></div>
+    <div class="tab-panel" id="panel-personas"><div class="card"><div class="section-title">Kundenprofile</div><div id="personaList"></div></div></div>
+    <div class="tab-panel" id="panel-hyp"><div class="card"><div class="section-title">A/B Test-Hypothesen</div><div id="hypList"></div></div></div>
+  </div>
+</div>
+
+<script>
+const ACCESS_CODE = '0102';
+function checkAccess(){
+  const input = document.getElementById('accessInput').value.trim();
+  if(input === ACCESS_CODE){
+    localStorage.setItem('access_granted', '1');
+    document.getElementById('accessOverlay').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+  } else {
+    document.getElementById('accessError').style.display = 'block';
+  }
+}
+if(localStorage.getItem('access_granted') === '1'){
+  document.getElementById('app').style.display = 'block';
+} else {
+  document.getElementById('accessOverlay').style.display = 'flex';
+}
+
+let result = null;
+let proj = { imports: [] };
+let currentImport = 'screenshot';
+
+const savedKey = localStorage.getItem('claude_api_key');
+const savedProject = localStorage.getItem('last_project_name');
+if(savedKey) document.getElementById('apiKey').value = savedKey;
+if(savedProject) document.getElementById('projectName').value = savedProject;
+
+if(savedKey && savedProject){
+  window.addEventListener('DOMContentLoaded', function(){
+    const step1Card = document.querySelector('#step1 .card');
+    const quickStart = document.createElement('div');
+    quickStart.style.cssText = 'background:var(--accent-bg);border:1px solid var(--accent);border-radius:8px;padding:12px 14px;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;gap:12px;';
+    quickStart.innerHTML = '<div style="font-size:13px;line-height:1.4"><strong>Letztes Projekt:</strong> ' + savedProject + '</div><button onclick="quickStart()" style="white-space:nowrap;padding:8px 14px;font-size:13px;">Fortsetzen →</button>';
+    step1Card.insertBefore(quickStart, step1Card.firstChild);
+  });
+}
+
+function quickStart(){
+  proj.key = localStorage.getItem('claude_api_key');
+  proj.name = localStorage.getItem('last_project_name');
+  proj.imports = [];
+  document.getElementById('s2title').textContent = proj.name;
+  renderQueue();
+  setStep(2);
+}
+
+function setStep(n){
+  for(let i=1;i<=4;i++){
+    document.getElementById('step'+i).classList.toggle('active', i===n);
+    const p = document.getElementById('ps'+i);
+    p.classList.remove('done','cur');
+    if(i<n) p.classList.add('done');
+    else if(i===n) p.classList.add('cur');
+  }
+}
+
+function goStep1(){ setStep(1); }
+
+function goStep2(){
+  const key = document.getElementById('apiKey').value.trim();
+  const name = document.getElementById('projectName').value.trim();
+  if(!key){ alert('Bitte API Key eingeben.'); return; }
+  if(!name){ alert('Bitte Projektname eingeben.'); return; }
+  localStorage.setItem('claude_api_key', key);
+  localStorage.setItem('last_project_name', name);
+  proj.key = key;
+  proj.name = name;
+  proj.imports = proj.imports || [];
+  document.getElementById('s2title').textContent = name;
+  renderQueue();
+  setStep(2);
+}
+
+function switchImport(t){
+  currentImport = t;
+  ['screenshot','paste','csv'].forEach(x => {
+    document.getElementById('area-'+x).style.display = x===t ? 'block' : 'none';
+    document.getElementById('tab-'+x).classList.toggle('active', x===t);
+  });
+}
+
+function renderQueue(){
+  const q = document.getElementById('importQueue');
+  if(!proj.imports.length){
+    q.innerHTML = '<div style="font-size:12px;color:var(--text-ter);text-align:center;padding:8px;">Noch keine Reviews importiert</div>';
+    document.getElementById('analyzeBtn').disabled = true;
+    return;
+  }
+  q.innerHTML = '<div class="section-title" style="margin-top:1rem;">Importiert (' + proj.imports.length + ')</div>' +
+    proj.imports.map((imp, i) => `
+      <div class="queue-item">
+        <svg class="queue-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        <div class="queue-info">
+          <span class="queue-source">${imp.source}</span>
+          <span class="queue-count"> · ${imp.reviews.length} Reviews</span>
+        </div>
+        <button class="queue-remove" onclick="removeImport(${i})" title="Entfernen">×</button>
+      </div>
+    `).join('');
+  document.getElementById('analyzeBtn').disabled = false;
+}
+
+function removeImport(i){
+  proj.imports.splice(i, 1);
+  renderQueue();
+}
+
+function addPasteImport(){
+  const text = document.getElementById('reviewText').value.trim();
+  const source = document.getElementById('pasteSource').value;
+  if(text.length < 20){ alert('Bitte Reviews eingeben.'); return; }
+  const reviews = text.split('\n').map(l => l.trim()).filter(l => l.length > 10);
+  proj.imports.push({ source, reviews });
+  document.getElementById('reviewText').value = '';
+  document.getElementById('charCount').textContent = '0 Reviews erkannt';
+  renderQueue();
+}
+
+function dzOver(e){ e.preventDefault(); document.getElementById('dz').classList.add('over'); }
+function dzLeave(){ document.getElementById('dz').classList.remove('over'); }
+function dzDrop(e){
+  e.preventDefault();
+  document.getElementById('dz').classList.remove('over');
+  const f = e.dataTransfer.files[0];
+  if(f && f.type.startsWith('image/')) processImg(f);
+}
+function onImg(inp){ if(inp.files[0]) processImg(inp.files[0]); inp.value=''; }
+
+function setImgStatus(msg, cls){
+  const el = document.getElementById('imgStatus');
+  el.className = 'status ' + cls;
+  el.innerHTML = msg;
+}
+
+function processImg(file){
+  document.getElementById('preview').src = URL.createObjectURL(file);
+  document.getElementById('preview').style.display = 'block';
+  document.getElementById('dzLabel').textContent = file.name;
+  setImgStatus('<span class="spinner"></span>Bild wird analysiert...', 'info');
+
+  const reader = new FileReader();
+  reader.onload = function(e){
+    const img = new Image();
+    img.onload = function(){
+      const MAX_DIM = 7500, CHUNK_OVERLAP = 200, QUALITY = 0.92;
+      const w = img.width, h = img.height;
+      const chunks = [];
+      const c = document.getElementById('cnv');
+      const ctx = c.getContext('2d');
+
+      if(w <= MAX_DIM && h <= MAX_DIM){
+        c.width = w; c.height = h;
+        ctx.drawImage(img, 0, 0);
+        chunks.push(c.toDataURL('image/jpeg', QUALITY).split(',')[1]);
+      } else if(h > MAX_DIM && w <= MAX_DIM){
+        const chunkHeight = MAX_DIM - CHUNK_OVERLAP;
+        let y = 0;
+        while(y < h){
+          const sliceH = Math.min(MAX_DIM, h - y);
+          c.width = w; c.height = sliceH;
+          ctx.clearRect(0, 0, w, sliceH);
+          ctx.drawImage(img, 0, y, w, sliceH, 0, 0, w, sliceH);
+          chunks.push(c.toDataURL('image/jpeg', QUALITY).split(',')[1]);
+          y += chunkHeight;
+        }
+      } else {
+        const scale = Math.min(MAX_DIM / w, MAX_DIM / h);
+        const nw = Math.round(w * scale), nh = Math.round(h * scale);
+        c.width = nw; c.height = nh;
+        ctx.drawImage(img, 0, 0, nw, nh);
+        chunks.push(c.toDataURL('image/jpeg', QUALITY).split(',')[1]);
+      }
+
+      setImgStatus('<span class="spinner"></span>' + chunks.length + ' Chunk(s) · Plattform & Reviews werden extrahiert...', 'info');
+      extractFromChunks(chunks);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function extractFromChunks(chunks){
+  try {
+    const allReviews = [];
+    let detectedSource = null;
+
+    for(let i = 0; i < chunks.length; i++){
+      setImgStatus('<span class="spinner"></span>Extrahiere Chunk ' + (i+1) + ' von ' + chunks.length + '...', 'info');
+
+      const promptText = i === 0
+        ? 'Aus diesem Screenshot einer Review-Plattform: 1) Identifiziere die Plattform (Trustpilot, Google Reviews, Amazon, App Store, Play Store, Yelp oder andere). 2) Extrahiere ALLE Kundenreviews. Antworte EXAKT in diesem Format:\n\nPLATTFORM: <name>\n---\n<Review 1>\n<Review 2>\n...\n\nNur Review-Texte, keine Sterne, Namen oder Daten. Lass KEINEN Review aus.'
+        : 'Extrahiere ALLE Kundenreviews aus diesem Screenshot-Chunk. Gib jeden Review als eine Zeile. Keine Sterne, Namen, Daten, Überschriften. Lass KEINEN Review aus.';
+
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': proj.key,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 6000,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: chunks[i] } },
+              { type: 'text', text: promptText }
+            ]
+          }]
+        })
+      });
+
+      if(!res.ok){
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error?.message || 'HTTP ' + res.status);
+      }
+      const data = await res.json();
+      let text = data.content.map(c => c.text || '').join('').trim();
+
+      if(i === 0){
+        const platformMatch = text.match(/PLATTFORM:\s*(.+?)(\n|$)/i);
+        if(platformMatch) detectedSource = platformMatch[1].trim();
+        const sep = text.indexOf('---');
+        if(sep !== -1) text = text.slice(sep + 3).trim();
+      }
+
+      text.split('\n').filter(l => l.trim().length > 10 && !l.match(/^PLATTFORM:/i)).forEach(l => allReviews.push(l.trim()));
+    }
+
+    const unique = [...new Set(allReviews)];
+    const deduped = [];
+    for(const r of unique){
+      const start = r.slice(0, 50).toLowerCase();
+      if(!deduped.some(d => d.toLowerCase().includes(start))) deduped.push(r);
+    }
+
+    const source = detectedSource || 'Unbekannte Quelle';
+    proj.imports.push({ source, reviews: deduped });
+    setImgStatus('✓ ' + deduped.length + ' Reviews aus <strong>' + source + '</strong> extrahiert', 'ok');
+    renderQueue();
+
+    setTimeout(() => {
+      document.getElementById('preview').style.display = 'none';
+      document.getElementById('dzLabel').textContent = 'Hier klicken oder Screenshot hineinziehen';
+    }, 2500);
+
+  } catch(err) {
+    setImgStatus('Fehler: ' + err.message, 'err');
+  }
+}
+
+document.getElementById('reviewText').addEventListener('input', function(){
+  document.getElementById('charCount').textContent = this.value.split('\n').filter(l => l.trim().length > 15).length + ' Review(s) erkannt';
+});
+
+function onCsv(inp){
+  const file = inp.files[0]; if(!file) return;
+  document.getElementById('csvLabel').textContent = file.name;
+  const source = document.getElementById('csvSource').value;
+  const r = new FileReader();
+  r.onload = function(e){
+    const rows = e.target.result.split('\n');
+    const hdr = rows[0].toLowerCase().split(',');
+    const col = hdr.findIndex(h => h.includes('review') || h.includes('text') || h.includes('comment'));
+    if(col === -1){ alert('Spalte "review" oder "text" nicht gefunden.'); return; }
+    const rv = rows.slice(1).map(r => r.split(',')[col]?.replace(/"/g,'').trim()).filter(r => r && r.length > 10);
+    proj.imports.push({ source, reviews: rv });
+    renderQueue();
+    document.getElementById('csvLabel').textContent = 'Hier klicken oder CSV hineinziehen';
+  };
+  r.readAsText(file);
+}
+
+let timerInterval = null;
+function startTimer(estimatedSec){
+  const startTime = Date.now();
+  document.getElementById('estTime').textContent = '~' + formatTime(estimatedSec);
+  document.getElementById('elapsedTime').textContent = '0:00';
+  timerInterval = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    document.getElementById('elapsedTime').textContent = formatTime(elapsed);
+  }, 1000);
+}
+function stopTimer(){ if(timerInterval) clearInterval(timerInterval); }
+function formatTime(s){
+  const m = Math.floor(s / 60), sec = s % 60;
+  return m + ':' + String(sec).padStart(2, '0');
+}
+
+function goStep3(){
+  if(!proj.imports.length){ alert('Bitte mindestens eine Review-Quelle importieren.'); return; }
+  setStep(3);
+  runAnalysis();
+}
+
+async function runAnalysis(){
+  const totalReviews = proj.imports.reduce((s, imp) => s + imp.reviews.length, 0);
+  const reviewsBlock = proj.imports.map(imp =>
+    `[QUELLE: ${imp.source}]\n` + imp.reviews.map(r => '- ' + r).join('\n')
+  ).join('\n\n');
+
+  const estimatedSec = Math.max(15, Math.round(totalReviews * 0.6));
+  startTimer(estimatedSec);
+
+  const prompt = `Du bist ein erfahrener Conversion-Rate-Optimization-Consultant (CRO). Deine Aufgabe: aus Kundenreviews konkrete A/B Test-Hypothesen für den Online-Shop "${proj.name}" ableiten.
+
+REVIEWS (mit Quellenangabe):
+${reviewsBlock}
+
+Antworte NUR mit diesem JSON-Objekt:
+{
+  "meta":{"total_reviews":<n>,"sentiment_positive":<0-100>,"sentiment_negative":<0-100>,"sentiment_neutral":<0-100>,"health_score":<0-10>},
+  "summary":"<2-3 Sätze wichtigste Erkenntnis>",
+  "takeaways":[{"title":"","insight":"","impact":"hoch|mittel|niedrig","icon":"warning|heart|star|clock|money|truck"}],
+  "pain_points":[{"title":"","description":"","frequency":"hoch|mittel|niedrig","quote":{"text":"","source":""}}],
+  "jtbd":[{"trigger":"","statement":"Wenn ich ..., möchte ich ..., damit ich ....","quotes":[{"text":"","source":""}]}],
+  "personas":[{"name":"<sprechender Name>","description":"","goals":[],"frustrations":[],"quotes":[{"text":"","source":""}]}],
+  "hypotheses":[{"priority":"hoch|mittel|niedrig","wenn":"","dann":"","weil":"","quotes":[{"text":"","source":""}]}]
+}
+
+KRITISCHE REGELN:
+- sentiment_positive + sentiment_negative + sentiment_neutral = 100 IMMER
+- health_score: 0 = katastrophal, 5 = durchschnittlich, 10 = exzellent
+- 3-5 takeaways, 4-6 pain_points, 3-5 jtbd, 2-4 personas, 4-6 hypotheses
+
+HYPOTHESEN-FOKUS (SEHR WICHTIG):
+- JEDE Hypothese muss eine KONKRETE, TESTBARE Änderung auf der Website sein (A/B Test)
+- "wenn" = spezifische UI/UX/Content-Änderung (z.B. "wir Lieferzeiten prominent auf der Produktseite anzeigen", "wir den Checkout-Button auf mobil vergrößern", "wir Trust-Badges neben dem Preis einfügen")
+- "dann" = messbare Metrik-Verbesserung (z.B. "steigt die Conversion Rate auf der Produktseite um X%", "reduziert sich die Warenkorbabbruchrate")
+- "weil" = konkrete Review-Basis (z.B. "mehrere Kunden die Lieferzeit als Unsicherheitsfaktor erwähnen")
+- Keine vagen Empfehlungen wie "die Seite verbessern" – immer spezifisch auf ein UI-Element, einen Content-Block oder einen Flow bezogen
+- Texte MIT KLEINBUCHSTABEN beginnen (weil Labels WENN/DANN/WEIL davor stehen)
+
+ZITATE:
+- Bei JEDEM Zitat-Objekt die source aus dem [QUELLE: ...] Tag mitgeben
+- Zitate sind DIREKTE Originaltexte aus den Reviews
+- 1 pro pain_point, 1-2 pro jtbd, 2-3 pro persona, 1-2 pro hypothesis
+
+Alles auf Deutsch, strikt basierend auf den gegebenen Reviews.`;
+
+  document.getElementById('aSub').textContent = 'Claude analysiert ' + totalReviews + ' Reviews...';
+  document.getElementById('aBar').style.width = '25%';
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': proj.key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 8000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    document.getElementById('aBar').style.width = '75%';
+    if(!res.ok){
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e.error?.message || 'HTTP ' + res.status);
+    }
+    const data = await res.json();
+    let raw = data.content.map(c => c.text || '').join('').replace(/```json|```/g, '').trim();
+    const s = raw.indexOf('{'), e = raw.lastIndexOf('}');
+    if(s !== -1 && e !== -1) raw = raw.slice(s, e+1);
+    result = JSON.parse(raw);
+    document.getElementById('aBar').style.width = '100%';
+    document.getElementById('aSub').textContent = 'Fertig!';
+    stopTimer();
+    setTimeout(buildDashboard, 400);
+  } catch(err) {
+    stopTimer();
+    document.getElementById('aSub').textContent = 'Fehler: ' + err.message;
+    setTimeout(() => setStep(2), 4000);
+  }
+}
+
+function buildDashboard(){
+  setStep(4);
+  const m = result.meta;
+  const totalReviews = proj.imports.reduce((s, imp) => s + imp.reviews.length, 0);
+  document.getElementById('dTitle').textContent = proj.name;
+  document.getElementById('dSub').textContent = totalReviews + ' Reviews aus ' + proj.imports.length + ' Quelle(n) analysiert';
+
+  document.getElementById('sourcesBar').innerHTML = proj.imports.map(imp =>
+    `<div class="source-chip"><strong>${imp.source}</strong> · ${imp.reviews.length} Reviews</div>`
+  ).join('');
+
+  document.getElementById('metrics').innerHTML = `
+    <div class="metric anim anim-delay-1"><div class="metric-val">${totalReviews}</div><div class="metric-label">Reviews</div></div>
+    <div class="metric anim anim-delay-2"><div class="metric-val" style="color:var(--ok)">${m.sentiment_positive}%</div><div class="metric-label">Positiv</div></div>
+    <div class="metric anim anim-delay-3"><div class="metric-val" style="color:var(--err)">${m.sentiment_negative}%</div><div class="metric-label">Negativ</div></div>
+    <div class="metric anim anim-delay-4"><div class="metric-val">${m.sentiment_neutral}%</div><div class="metric-label">Neutral</div></div>`;
+
+  const score = m.health_score || 5;
+  const scoreColor = score >= 7 ? 'var(--ok)' : score >= 4 ? 'var(--warn)' : 'var(--err)';
+  const circumference = 283;
+  const offset = circumference - (score / 10) * circumference;
+
+  const icons = {
+    warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    heart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
+    star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
+    clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+    money: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+    truck: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>',
+    bulb: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.8.7 1 1.6 1 2.3v1h6v-1c0-.7.2-1.6 1-2.3A7 7 0 0 0 12 2z"/></svg>'
+  };
+
+  document.getElementById('overviewContent').innerHTML = `
+    <div class="overview-hero anim anim-delay-1">
+      <div class="score-ring">
+        <svg width="160" height="160" viewBox="0 0 100 100">
+          <circle class="track" cx="50" cy="50" r="45"></circle>
+          <circle cx="50" cy="50" r="45" style="fill:none;stroke-width:10;stroke:${scoreColor};stroke-linecap:round;stroke-dasharray:${circumference};stroke-dashoffset:${offset};animation:scoreGrow 1.2s ease-out forwards;"></circle>
+        </svg>
+        <div class="score-num"><div class="score-val" style="color:${scoreColor}">${score}</div><div class="score-of">von 10</div></div>
+      </div>
+      <div>
+        <div class="hero-summary-title">Zusammenfassung</div>
+        <div class="hero-summary-text">${result.summary || ''}</div>
+      </div>
+    </div>
+    <div class="section-title anim anim-delay-2" style="margin-top:1.5rem;">Wichtigste Erkenntnisse</div>
+    <div class="takeaway-grid">
+      ${(result.takeaways || []).map((t, i) => `
+        <div class="takeaway anim anim-delay-${Math.min(i+3, 6)}">
+          <div class="takeaway-icon">${icons[t.icon] || icons.bulb}</div>
+          <div class="takeaway-content">
+            <div class="takeaway-head">
+              <span class="takeaway-title">${t.title}</span>
+              <span class="badge badge-${t.impact?.toLowerCase()}">${t.impact}</span>
+            </div>
+            <div class="takeaway-insight">${t.insight}</div>
+          </div>
+        </div>`).join('')}
+    </div>
+  `;
+
+  const renderQuote = (q) => {
+    if(!q) return '';
+    const text = typeof q === 'string' ? q : q.text;
+    const src = typeof q === 'object' ? q.source : null;
+    return `<div class="quote">${src ? `<div class="quote-source">${src}</div>` : ''}"${text}"</div>`;
+  };
+
+  document.getElementById('painList').innerHTML = result.pain_points.map((p,i) => `
+    <div class="pain">
+      <div class="pain-num">${i+1}.</div>
+      <div style="flex:1">
+        <div class="pain-title">${p.title} <span class="badge badge-${(p.frequency||'').toLowerCase()}">${p.frequency}</span></div>
+        <div class="pain-desc">${p.description}</div>
+        ${p.quote ? `
+          <div class="collapse" id="pain-c-${i}">
+            <button class="collapse-btn" onclick="toggleCollapse('pain-c-${i}')"><span class="collapse-arrow">▼</span> Zitat anzeigen</button>
+            <div class="collapse-body">${renderQuote(p.quote)}</div>
+          </div>` : ''}
+      </div>
+    </div>`).join('');
+
+  document.getElementById('jtbdList').innerHTML = result.jtbd.map((j, i) => `
+    <div class="jtbd">
+      <div class="jtbd-trigger">Situation: ${j.trigger}</div>
+      <div class="jtbd-statement">${j.statement}</div>
+      ${(j.quotes && j.quotes.length) ? `
+        <div class="collapse" id="jtbd-c-${i}" style="margin-top:10px;">
+          <button class="collapse-btn" onclick="toggleCollapse('jtbd-c-${i}')"><span class="collapse-arrow">▼</span> Zitat${j.quotes.length>1?'e':''} anzeigen (${j.quotes.length})</button>
+          <div class="collapse-body">${j.quotes.map(renderQuote).join('')}</div>
+        </div>` : ''}
+    </div>`).join('');
+
+  document.getElementById('personaList').innerHTML = result.personas.map((p, i) => `
+    <div class="persona">
+      <div style="margin-bottom:12px;">
+        <div style="font-size:15px;font-weight:500;margin-bottom:2px;">${p.name}</div>
+        <div style="font-size:13px;color:var(--text-sec);line-height:1.5">${p.description}</div>
+      </div>
+      <div class="persona-grid">
+        <div><div class="section-title">Ziele</div>${p.goals.map(g => `<div class="persona-list">· ${g}</div>`).join('')}</div>
+        <div><div class="section-title">Frustrationen</div>${p.frustrations.map(f => `<div class="persona-list">· ${f}</div>`).join('')}</div>
+      </div>
+      ${(p.quotes && p.quotes.length) ? `
+        <div class="collapse" id="persona-c-${i}" style="margin-top:14px;">
+          <button class="collapse-btn" onclick="toggleCollapse('persona-c-${i}')"><span class="collapse-arrow">▼</span> Zitate anzeigen (${p.quotes.length})</button>
+          <div class="collapse-body">${p.quotes.map(renderQuote).join('')}</div>
+        </div>` : ''}
+    </div>`).join('');
+
+  const lc = (t) => !t ? '' : t.charAt(0).toLowerCase() + t.slice(1);
+  document.getElementById('hypList').innerHTML = result.hypotheses.map((h,i) => `
+    <div class="hyp">
+      <div class="hyp-head">
+        <span>#${i+1}</span>
+        <span class="badge badge-${(h.priority||'').toLowerCase()}">Priorität: ${h.priority}</span>
+      </div>
+      <div class="hyp-line"><span class="hyp-if">Wenn</span> ${lc(h.wenn)}</div>
+      <div class="hyp-line"><span class="hyp-then">Dann</span> ${lc(h.dann)}</div>
+      <div class="hyp-line"><span class="hyp-because">Weil</span> ${lc(h.weil)}</div>
+      ${(h.quotes && h.quotes.length) ? `
+        <div class="collapse" id="hyp-c-${i}" style="margin-top:14px;">
+          <button class="collapse-btn" onclick="toggleCollapse('hyp-c-${i}')"><span class="collapse-arrow">▼</span> Zitat${h.quotes.length>1?'e':''} anzeigen (${h.quotes.length})</button>
+          <div class="collapse-body">${h.quotes.map(renderQuote).join('')}</div>
+        </div>` : ''}
+    </div>`).join('');
+}
+
+function toggleCollapse(id){ document.getElementById(id).classList.toggle('open'); }
+function switchTab(n, el){
+  document.querySelectorAll('.tab-panel').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+  document.getElementById('panel-'+n).classList.add('active');
+  el.classList.add('active');
+}
+
+function addMoreReviews(){
+  renderQueue();
+  setStep(2);
+}
+
+function doExport(){
+  if(!result) return;
+  const b = new Blob([JSON.stringify({ project: proj.name, sources: proj.imports.map(i => ({source: i.source, count: i.reviews.length})), analysis: result }, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(b);
+  a.download = proj.name.replace(/\s+/g,'-') + '.json';
+  a.click();
+}
+
+function resetApp(){
+  result = null;
+  proj = { imports: [] };
+  document.getElementById('reviewText').value = '';
+  document.getElementById('projectName').value = '';
+  document.getElementById('preview').style.display = 'none';
+  document.getElementById('imgStatus').className = 'status';
+  document.getElementById('dzLabel').textContent = 'Hier klicken oder Screenshot hineinziehen';
+  switchImport('screenshot');
+  setStep(1);
+}
+</script>
+</body>
+</html>
